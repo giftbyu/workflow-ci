@@ -8,8 +8,8 @@ on:
 
 env:
   DAGSHUB_URI: https://dagshub.com/giftbyu/mlops.mlflow
-  MODEL_URI: rruns:/12f36f8a0670434b9295250400c6aeaf/model # Ganti dengan URI dari Langkah 1
-  DOCKER_IMAGE_NAME: giftbyu/water-quality-model # Ganti dengan format: username/repo-name
+  MODEL_URI: runs:/12f36f8a0670434b9295250400c6aeaf/model # Ganti dengan URI dari Langkah 1
+  DOCKER_IMAGE_NAME: giftbyu/workflow-ci # Ganti dengan format: username/repo-name
 
 jobs:
   train-and-build:
