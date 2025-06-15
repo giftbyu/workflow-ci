@@ -21,15 +21,14 @@ jobs:
       - name: Set up Miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
-          python-version: '3.12.7'
+          python-version: '3.12.7'  # Versi Python yang kompatibel
           activate-environment: "mlflow-env"
           auto-update-conda: true
           auto-activate-base: false
 
       - name: Install MLflow & Dependencies
         run: |
-          conda install -c conda-forge mlflow=2.19.0
-          pip install dagshub pandas scikit-learn matplotlib seaborn imbalanced-learn
+          pip install mlflow==2.19.0 dagshub pandas scikit-learn matplotlib seaborn imbalanced-learn
 
       - name: Run MLflow Project to Retrain Model
         env:
