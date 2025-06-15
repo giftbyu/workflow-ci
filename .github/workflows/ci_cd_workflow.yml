@@ -21,7 +21,7 @@ jobs:
       - name: Set up Miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
-          python-version: '3.12.7'  # Versi Python yang kompatibel
+          python-version: '3.12.7'
           activate-environment: "mlflow-env"
           auto-update-conda: true
           auto-activate-base: false
@@ -50,7 +50,17 @@ jobs:
         run: |
           eval "$(conda shell.bash hook)"
           conda activate mlflow-env
-          RUN_ID=$(mlflow runs list --experiment-name "$EXPERIMENT_NAME" --order-by "start_time DESC" --limit 1 | grep -oP "(?<=run_id: )\w+")
+          
+          # Dapatkan experiment ID berdasarkan nama
+          EXPERIMENT_ID=$(mlflow experiments list | grep -w "$EXPERIMENT_NAME" | awk '{print $2}')
+          
+          # Jika tidak ditemukan, buat eksperimen baru
+          if [ -z "$EXPERIMENT_ID" ]; then
+            EXPERIMENT_ID=$(mlflow experiments create -n "$EXPERIMENT_NAME" | awk '{print $NF}' | tr -d '\n')
+          fi
+          
+          # Dapatkan run ID terbaru
+          RUN_ID=$(mlflow runs list --experiment-id "$EXPERIMENT_ID" --order-by "attribute.start_time DESC" --limit 1 | grep -oP "(?<=run_id: )\w+")
           echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
 
       - name: Log in to Docker Hub

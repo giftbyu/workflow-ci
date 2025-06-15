@@ -1,5 +1,6 @@
 import pandas as pd
 import mlflow
+import os
 import mlflow.sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
@@ -9,7 +10,9 @@ def main():
     try:
         mlflow.sklearn.autolog()
 
-        df = pd.read_csv('processed_data.csv')
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        data_path = os.path.join(current_dir, 'processed_data.csv')
+        df = pd.read_csv(data_path)
         X = df.drop('Potability', axis=1)
         y = df['Potability']
         
