@@ -8,8 +8,8 @@ on:
 
 env:
   DAGSHUB_URI: https://dagshub.com/giftbyu/mlops.mlflow
-  MODEL_URI: runs:/12f36f8a0670434b9295250400c6aeaf/model # Ganti dengan URI dari Langkah 1
-  DOCKER_IMAGE_NAME: giftbyu/workflow-ci # Ganti dengan format: username/repo-name
+  MODEL_URI: rruns:/12f36f8a0670434b9295250400c6aeaf/model # Ganti dengan URI dari Langkah 1
+  DOCKER_IMAGE_NAME: giftbyu/workflow-ci
 
 jobs:
   train-and-build:
@@ -37,7 +37,6 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
-          # Memanggil secret, bukan menulis langsung
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 

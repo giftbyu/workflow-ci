@@ -1,4 +1,4 @@
-name: mlflow-project-env
+name: mlflow-project
 channels:
   - defaults
   - conda-forge
