@@ -8,7 +8,7 @@ on:
 
 env:
   DAGSHUB_URI: https://dagshub.com/giftbyu/mlops.mlflow
-  EXPERIMENT_NAME: "WaterPotability"  # Nama eksperimen tetap
+  EXPERIMENT_NAME: "WaterPotability"
   DOCKER_IMAGE_NAME: giftbyu/workflow-ci
 
 jobs:
@@ -18,13 +18,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: '3.12.7'
+          activate-environment: "mlflow-env"
+          auto-update-conda: true
+          auto-activate-base: false
 
       - name: Install MLflow & Dependencies
-        run: pip install mlflow==2.19.0 dagshub pandas scikit-learn
+        run: |
+          conda install -c conda-forge mlflow=2.19.0
+          pip install dagshub pandas scikit-learn matplotlib seaborn imbalanced-learn
 
       - name: Run MLflow Project to Retrain Model
         env:
@@ -32,6 +37,8 @@ jobs:
           MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
           MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
+          eval "$(conda shell.bash hook)"
+          conda activate mlflow-env
           mlflow run MLProject_folder \
             --experiment-name "$EXPERIMENT_NAME"
 
@@ -42,6 +49,8 @@ jobs:
           MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
           MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
+          eval "$(conda shell.bash hook)"
+          conda activate mlflow-env
           RUN_ID=$(mlflow runs list --experiment-name "$EXPERIMENT_NAME" --order-by "start_time DESC" --limit 1 | grep -oP "(?<=run_id: )\w+")
           echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
 
@@ -52,13 +61,6 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and Push Docker Image
-        env:
-          MLFLOW_TRACKING_URI: ${{ env.DAGSHUB_URI }}
-          MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
-          MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
-          mlflow models build-docker \
-            --model-uri "runs:/${{ env.RUN_ID }}/model" \
-            --name "${{ env.DOCKER_IMAGE_NAME }}" \
-            --enable-mlserver
+          docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
           docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
