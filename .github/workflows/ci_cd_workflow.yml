@@ -69,7 +69,7 @@ jobs:
         run: |
           cat <<EOT > Dockerfile
           FROM python:3.12
-          RUN pip install mlflow==2.9.2 pandas scikit-learn imbalanced-learn
+          RUN pip install mlflow==2.19.0 pandas scikit-learn imbalanced-learn
           COPY model /model
           EXPOSE 5000
           CMD ["mlflow", "models", "serve", "-m", "/model", "-p", "5000"]
