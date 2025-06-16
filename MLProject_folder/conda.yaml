@@ -5,6 +5,8 @@ channels:
 dependencies:
   - python=3.12.7
   - pip
+  - packaging 
+  - protobuf
   - pip:
     - mlflow
     - pandas
@@ -12,5 +14,3 @@ dependencies:
     - matplotlib      
     - seaborn         
     - imbalanced-learn
-    - packaging 
-    - protobuf
