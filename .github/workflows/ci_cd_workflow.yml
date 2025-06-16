@@ -8,7 +8,7 @@ on:
 
 env:
   DAGSHUB_URI: https://dagshub.com/giftbyu/mlops.mlflow
-  DOCKER_IMAGE_NAME: giftbyu/workflow-ci
+  DOCKER_IMAGE_NAME: septbyu/workflow-ci 
   EXPERIMENT_NAME: "WaterPotability_Tuning_CI"
   CONDA_ENV_NAME: "water-potability-env"
   PROJECT_FOLDER: "MLProject_folder"
@@ -60,7 +60,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 6. Create Dockerfile
+      - name: 6. Verify Docker Login
+        run: |
+          echo "Verifying Docker login..."
+          docker info
+
+      - name: 7. Create Dockerfile
         run: |
           cat <<EOT > Dockerfile
           FROM python:3.12-slim
@@ -70,7 +75,13 @@ jobs:
           CMD ["mlflow", "models", "serve", "-m", "/model", "-p", "5000"]
           EOT
 
-      - name: 7. Build and Push Docker Image
+      - name: 8. Build and Push Docker Image
         run: |
+          # Build image
           docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
+          
+          # Verify image exists locally
+          docker images
+          
+          # Push image
           docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
