@@ -68,7 +68,7 @@ jobs:
       - name: Create Dockerfile
         run: |
           cat <<EOT > Dockerfile
-          FROM python:3.12-slim
+          FROM python:3.12
           RUN pip install mlflow==2.9.2 pandas scikit-learn imbalanced-learn
           COPY model /model
           EXPOSE 5000
