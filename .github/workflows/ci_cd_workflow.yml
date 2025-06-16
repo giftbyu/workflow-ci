@@ -77,6 +77,7 @@ jobs:
           source ~/.bashrc
           
           conda activate ${{ env.CONDA_ENV_NAME }}
+          pip install --upgrade mlflow==2.19.0
           echo "Activate env: $(conda env list | grep '*')"
           echo "MLFlow version: $(mlflow --version)"
 
