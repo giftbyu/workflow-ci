@@ -37,91 +37,40 @@ jobs:
           MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         shell: bash -l {0}
         run: |
-          echo "--- Starting MLflow Run ---"
           mlflow run ${{ env.PROJECT_FOLDER }} --experiment-name "$EXPERIMENT_NAME" > mlflow_output.txt
-          echo "--- MLflow Run Output ---"
-          cat mlflow_output.txt
-          echo "------------------------"
-          
           RUN_ID=$(grep -oP "MLflow Run ID: \K.+" mlflow_output.txt | tr -d '[:space:]')
-          
           if [ -z "$RUN_ID" ]; then
-            echo "::error::Failed to extract RUN_ID from MLflow output. The 'grep' command likely found no match. Aborting."
+            echo "::error::Failed to extract RUN_ID"
             exit 1
           fi
-          
-          echo "Successfully extracted RUN_ID: $RUN_ID"
           echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
 
-      - name: 4. Log in to Docker Hub
+      - name: 4. Download Model Artifacts
+        env:
+          MLFLOW_TRACKING_URI: ${{ env.DAGSHUB_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+        run: |
+          pip install mlflow==2.19.0
+          mlflow artifacts download -u "runs:/${{ env.RUN_ID }}/model" -d model
+
+      - name: 5. Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 4.5 Create Download Script and Dockerfile
+      - name: 6. Create Dockerfile
         run: |
-          # Buat skrip download_model.py
-          cat <<EOT > download_model.py
-          import mlflow
-          import os
-          import sys
-          
-          if __name__ == "__main__":
-              run_id = os.environ['RUN_ID']
-              tracking_uri = os.environ['MLFLOW_TRACKING_URI']
-              username = os.environ.get('MLFLOW_TRACKING_USERNAME')
-              password = os.environ.get('MLFLOW_TRACKING_PASSWORD')
-              
-              # Setup tracking URI
-              mlflow.set_tracking_uri(tracking_uri)
-              
-              # Download model artifacts
-              mlflow.artifacts.download_artifacts(
-                  artifact_uri=f"runs:/{run_id}/model",
-                  dst_path="/model"
-              )
-              print(f"Successfully downloaded model for run: {run_id}")
-          EOT
-          
-          # Buat Dockerfile yang diperbarui
           cat <<EOT > Dockerfile
           FROM python:3.12-slim
-          
-          # Install dependencies
           RUN pip install mlflow==2.19.0 pandas
-          
-          # Copy download script
-          COPY download_model.py /download_model.py
-          
-          # Environment variables (secrets akan di-set saat runtime)
-          ENV MLFLOW_TRACKING_URI=""
-          ENV MLFLOW_TRACKING_USERNAME=""
-          ENV MLFLOW_TRACKING_PASSWORD=""
-          ENV RUN_ID=""
-          
-          # Download model during build
-          RUN python /download_model.py
-          
+          COPY model /model
           EXPOSE 5000
-          
           CMD ["mlflow", "models", "serve", "-m", "/model", "-p", "5000"]
           EOT
-          
-          echo "Files created:"
-          ls -l download_model.py Dockerfile
 
-      - name: 5. Build and Push Docker Image with the Newly Trained Model
+      - name: 7. Build and Push Docker Image
         run: |
-          echo "Building Docker image for RUN_ID: ${{ env.RUN_ID }}"
-          
-          docker build \
-            --build-arg RUN_ID=${{ env.RUN_ID }} \
-            --build-arg MLFLOW_TRACKING_URI=${{ env.DAGSHUB_URI }} \
-            --build-arg DAGSHUB_USERNAME=${{ secrets.DAGSHUB_USERNAME }} \
-            --build-arg DAGSHUB_TOKEN=${{ secrets.DAGSHUB_TOKEN }} \
-            -t ${{ env.DOCKER_IMAGE_NAME }}:latest \
-            .
-          
-          echo "Pushing Docker image to Docker Hub..."
+          docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
           docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
