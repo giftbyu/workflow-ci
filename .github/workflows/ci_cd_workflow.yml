@@ -66,17 +66,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 6. Create Dockerfile and Build Image
+      - name: 6. Build Docker Image with MLflow
+        env:
+          MLFLOW_TRACKING_URI: ${{ env.DAGSHUB_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
-          cat <<EOT > Dockerfile
-          FROM python:3.12.7
-          # Gunakan versi MLflow yang stabil
-          RUN pip install mlflow==2.19.0
-          COPY model /model
-          EXPOSE 5000
-          CMD ["mlflow", "models", "serve", "-m", "/model", "--host", "0.0.0.0", "-p", "5000"]
-          EOT
-          docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
+          mlflow models build-docker -m "runs:/${{ env.RUN_ID }}/model" -n "${{ env.DOCKER_IMAGE_NAME }}"
 
       - name: 7. Push Docker Image
         run: docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
