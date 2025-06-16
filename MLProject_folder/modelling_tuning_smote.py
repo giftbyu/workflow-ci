@@ -19,7 +19,7 @@ def main(args):
     mlflow.log_param("script_name", "modelling_tuning_smote.py")
 
     try:
-        df = pd.read_csv("MLProject_folder/processed_data.csv")
+        df = pd.read_csv("processed_data.csv")
     except Exception as e:
         print(f"Error loading data: {e}")
         return
@@ -39,7 +39,6 @@ def main(args):
     print("Data shape after SMOTE:", X_train_smote.shape)
     mlflow.log_param("smote_applied", True)
 
-    print("Training RandomForestClassifier with SMOTE...")
     model = RandomForestClassifier(
         n_estimators=args.n_estimators,
         max_depth=args.max_depth,
@@ -80,8 +79,6 @@ def main(args):
 
     mlflow.sklearn.log_model(model, "model")
     print("Model logged successfully.")
-
-    mlflow.end_run()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
