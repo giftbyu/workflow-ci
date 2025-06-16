@@ -28,7 +28,7 @@ jobs:
 
       - name: Install MLflow & Dependencies
         run: |
-          pip install mlflow==2.19.0 dagshub pandas scikit-learn matplotlib seaborn imbalanced-learn packaging protobuf
+          pip install mlflow dagshub pandas scikit-learn matplotlib seaborn imbalanced-learn packaging protobuf
 
       - name: Run MLflow Project to Retrain Model
         env:
