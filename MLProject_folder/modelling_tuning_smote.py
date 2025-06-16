@@ -19,7 +19,7 @@ def main(args):
 
         # 1. Load Data
         try:
-            df = pd.read_csv("https://raw.githubusercontent.com/plotly/datasets/master/processed_data.csv")
+            df = pd.read_csv("processed_data.csv")
         except Exception as e:
             print(f"Error loading data: {e}")
             return
