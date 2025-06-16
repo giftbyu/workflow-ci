@@ -17,10 +17,10 @@ jobs:
   train-build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Miniconda
+      - name: 2. Set up Miniconda and Create Training Environment
         uses: conda-incubator/setup-miniconda@v3
         with:
           activate-environment: ${{ env.CONDA_ENV_NAME }}
@@ -28,7 +28,7 @@ jobs:
           auto-update-conda: true
           auto-activate-base: false
 
-      - name: Run MLflow Training
+      - name: 3. Run MLflow Project to Train Tuned Model
         id: train_step
         env:
           MLFLOW_TRACKING_URI: ${{ env.DAGSHUB_URI }}
@@ -37,45 +37,46 @@ jobs:
         shell: bash -l {0}
         run: |
           cd ${{ env.PROJECT_FOLDER }}
-          mlflow run . --experiment-name "$EXPERIMENT_NAME" > mlflow_output.txt
+          # Alihkan output untuk ditangkap dan juga ditampilkan di log
+          mlflow run . --experiment-name "$EXPERIMENT_NAME" 2>&1 | tee mlflow_output.txt
+          # Ekstrak RUN_ID dari file log
           RUN_ID=$(grep -oP "MLflow Run ID: \K[a-f0-9]{32}" mlflow_output.txt)
           echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
-          cat mlflow_output.txt
 
-      - name: Verify Run ID
-        run: |
-          echo "RUN_ID: ${{ env.RUN_ID }}"
-          if [[ ! "${{ env.RUN_ID }}" =~ ^[a-f0-9]{32}$ ]]; then
-            echo "::error::Invalid RUN_ID format"
-            exit 1
-          fi
-
-      - name: Download Model Artifacts
+      - name: 4. Download Model Artifacts
         env:
           MLFLOW_TRACKING_URI: ${{ env.DAGSHUB_URI }}
           MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
           MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+        shell: bash -l {0}
         run: |
-          pip install mlflow==2.19.0
-          mlflow artifacts download -u "runs:/${{ env.RUN_ID }}/model" -d model
+          # Verifikasi RUN_ID
+          echo "Attempting to download artifacts for RUN_ID: ${{ env.RUN_ID }}"
+          if [ -z "${{ env.RUN_ID }}" ]; then
+            echo "::error::RUN_ID is empty. Training step might have failed."
+            exit 1
+          fi
+          # Pastikan folder tujuan ada
+          mkdir -p model
+          mlflow artifacts download --run-id "${{ env.RUN_ID }}" --artifact-path model -d ./model
 
-      - name: Login to Docker Hub
+      - name: 5. Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Create Dockerfile
+      - name: 6. Create Dockerfile and Build Image
         run: |
           cat <<EOT > Dockerfile
-          FROM python:3.12
-          RUN pip install mlflow==2.19.0 pandas scikit-learn imbalanced-learn
+          FROM python:3.12.7
+          # Gunakan versi MLflow yang stabil
+          RUN pip install mlflow==2.19.0
           COPY model /model
           EXPOSE 5000
-          CMD ["mlflow", "models", "serve", "-m", "/model", "-p", "5000"]
+          CMD ["mlflow", "models", "serve", "-m", "/model", "--host", "0.0.0.0", "-p", "5000"]
           EOT
-
-      - name: Build and Push Docker Image
-        run: |
           docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
-          docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
+
+      - name: 7. Push Docker Image
+        run: docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
