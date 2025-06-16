@@ -59,40 +59,61 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 4.5 Create Dockerfile
+      - name: 4.5 Create Download Script and Dockerfile
         run: |
+          # Buat skrip download_model.py
+          cat <<EOT > download_model.py
+          import mlflow
+          import os
+          import sys
+          
+          if __name__ == "__main__":
+              run_id = os.environ['RUN_ID']
+              tracking_uri = os.environ['MLFLOW_TRACKING_URI']
+              username = os.environ.get('MLFLOW_TRACKING_USERNAME')
+              password = os.environ.get('MLFLOW_TRACKING_PASSWORD')
+              
+              # Setup tracking URI
+              mlflow.set_tracking_uri(tracking_uri)
+              
+              # Download model artifacts
+              mlflow.artifacts.download_artifacts(
+                  artifact_uri=f"runs:/{run_id}/model",
+                  dst_path="/model"
+              )
+              print(f"Successfully downloaded model for run: {run_id}")
+          EOT
+          
+          # Buat Dockerfile yang diperbarui
           cat <<EOT > Dockerfile
           FROM python:3.12-slim
           
-          ARG RUN_ID
-          ARG MLFLOW_TRACKING_URI
-          ARG DAGSHUB_USERNAME
-          ARG DAGSHUB_TOKEN
+          # Install dependencies
+          RUN pip install mlflow==2.19.0 pandas
           
-          ENV MLFLOW_TRACKING_URI=\$MLFLOW_TRACKING_URI
-          ENV MLFLOW_TRACKING_USERNAME=\$DAGSHUB_USERNAME
-          ENV MLFLOW_TRACKING_PASSWORD=\$DAGSHUB_TOKEN
-          ENV RUN_ID=\$RUN_ID
+          # Copy download script
+          COPY download_model.py /download_model.py
           
-          RUN pip install mlflow==2.19.0
+          # Environment variables (secrets akan di-set saat runtime)
+          ENV MLFLOW_TRACKING_URI=""
+          ENV MLFLOW_TRACKING_USERNAME=""
+          ENV MLFLOW_TRACKING_PASSWORD=""
+          ENV RUN_ID=""
           
-          # Download model
-          RUN mlflow models download -r \$RUN_ID -d /model
+          # Download model during build
+          RUN python /download_model.py
           
           EXPOSE 5000
           
           CMD ["mlflow", "models", "serve", "-m", "/model", "-p", "5000"]
           EOT
           
-          echo "Dockerfile created:"
-          cat Dockerfile
+          echo "Files created:"
+          ls -l download_model.py Dockerfile
 
       - name: 5. Build and Push Docker Image with the Newly Trained Model
         run: |
           echo "Building Docker image for RUN_ID: ${{ env.RUN_ID }}"
-          echo "Current directory: $(pwd)"
-          echo "Contents:"
-          ls -la
           
           docker build \
             --build-arg RUN_ID=${{ env.RUN_ID }} \
