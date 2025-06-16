@@ -59,9 +59,41 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: 4.5 Create Dockerfile
+        run: |
+          cat <<EOT > Dockerfile
+          FROM python:3.12-slim
+          
+          ARG RUN_ID
+          ARG MLFLOW_TRACKING_URI
+          ARG DAGSHUB_USERNAME
+          ARG DAGSHUB_TOKEN
+          
+          ENV MLFLOW_TRACKING_URI=\$MLFLOW_TRACKING_URI
+          ENV MLFLOW_TRACKING_USERNAME=\$DAGSHUB_USERNAME
+          ENV MLFLOW_TRACKING_PASSWORD=\$DAGSHUB_TOKEN
+          ENV RUN_ID=\$RUN_ID
+          
+          RUN pip install mlflow==2.19.0
+          
+          # Download model
+          RUN mlflow models download -r \$RUN_ID -d /model
+          
+          EXPOSE 5000
+          
+          CMD ["mlflow", "models", "serve", "-m", "/model", "-p", "5000"]
+          EOT
+          
+          echo "Dockerfile created:"
+          cat Dockerfile
+
       - name: 5. Build and Push Docker Image with the Newly Trained Model
         run: |
           echo "Building Docker image for RUN_ID: ${{ env.RUN_ID }}"
+          echo "Current directory: $(pwd)"
+          echo "Contents:"
+          ls -la
+          
           docker build \
             --build-arg RUN_ID=${{ env.RUN_ID }} \
             --build-arg MLFLOW_TRACKING_URI=${{ env.DAGSHUB_URI }} \
