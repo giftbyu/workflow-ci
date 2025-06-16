@@ -19,7 +19,7 @@ def main(args):
     mlflow.log_param("script_name", "modelling_tuning_smote.py")
 
     try:
-        df = pd.read_csv("processed_data.csv")
+        df = pd.read_csv("MLProject_folder/processed_data.csv")
     except Exception as e:
         print(f"Error loading data: {e}")
         return
