@@ -9,7 +9,6 @@ on:
 env:
   DAGSHUB_URI: https://dagshub.com/giftbyu/mlops.mlflow
   DOCKER_IMAGE_NAME: giftbyu/workflow-ci
-  
   EXPERIMENT_NAME: "WaterPotability_Tuning_CI"
   CONDA_ENV_NAME: "water-potability-env"
   PROJECT_FOLDER: "MLProject_folder"
@@ -39,23 +38,20 @@ jobs:
         shell: bash -l {0}
         run: |
           echo "--- Starting MLflow Run ---"
+          mlflow run ${{ env.PROJECT_FOLDER }} --experiment-name "$EXPERIMENT_NAME" > mlflow_output.txt
+          echo "--- MLflow Run Output ---"
+          cat mlflow_output.txt
+          echo "------------------------"
           
-          # PERBAIKAN 1: Mengembalikan pembungkus sh -c "..."
-          # Ini untuk memastikan pengalihan output (>) diproses dengan benar oleh shell.
-          sh -c "mlflow run ${{ env.PROJECT_FOLDER }} --experiment-name '<span class="math-inline">EXPERIMENT\_NAME' \> mlflow\_output\.txt"
-          echo "\-\-\- MLflow Run Output \-\-\-"
-          cat mlflow\_output\.txt
-          echo "\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-"
-          RUN\_ID\=</span>(grep -oP "MLflow Run ID: \K.+" mlflow_output.txt | tr -d '[:space:]')
-                    
-                  
-                    if; then
-                      echo "::error::Failed to extract RUN_ID from MLflow output. The 'grep' command likely found no match. Aborting."
-                      exit 1
-                    fi
-                    
-                    echo "Successfully extracted RUN_ID: $RUN_ID"
-                    echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+          RUN_ID=$(grep -oP "MLflow Run ID: \K.+" mlflow_output.txt | tr -d '[:space:]')
+          
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::Failed to extract RUN_ID from MLflow output. The 'grep' command likely found no match. Aborting."
+            exit 1
+          fi
+          
+          echo "Successfully extracted RUN_ID: $RUN_ID"
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
 
       - name: 4. Log in to Docker Hub
         uses: docker/login-action@v3
@@ -65,14 +61,14 @@ jobs:
 
       - name: 5. Build and Push Docker Image with the Newly Trained Model
         run: |
-          echo "Building Docker image for RUN_ID: <span class="math-inline">\{\{ env\.RUN\_ID \}\}"
-          docker build \\
-          \-\-build\-arg RUN\_ID\=</span>{{ env.RUN_ID }} \
-                      --build-arg MLFLOW_TRACKING_URI=<span class="math-inline">\{\{ env\.DAGSHUB\_URI \}\} \\
-          \-\-build\-arg DAGSHUB\_USERNAME\=</span>{{ secrets.DAGSHUB_USERNAME }} \
-                      --build-arg DAGSHUB_TOKEN=${{ secrets.DAGSHUB_TOKEN }} \
-                      -t ${{ env.DOCKER_IMAGE_NAME }}:latest \
-                      -f Dockerfile.
-                    
-                    echo "Pushing Docker image to Docker Hub..."
-                    docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
+          echo "Building Docker image for RUN_ID: ${{ env.RUN_ID }}"
+          docker build \
+            --build-arg RUN_ID=${{ env.RUN_ID }} \
+            --build-arg MLFLOW_TRACKING_URI=${{ env.DAGSHUB_URI }} \
+            --build-arg DAGSHUB_USERNAME=${{ secrets.DAGSHUB_USERNAME }} \
+            --build-arg DAGSHUB_TOKEN=${{ secrets.DAGSHUB_TOKEN }} \
+            -t ${{ env.DOCKER_IMAGE_NAME }}:latest \
+            .
+          
+          echo "Pushing Docker image to Docker Hub..."
+          docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
