@@ -3,11 +3,7 @@ conda_env: conda.yaml
 entry_points:
   main:
     parameters:
-      n_estimators: {type: int, default: 300}
-      max_depth: {type: int, default: 10}
-      min_samples_split: {type: int, default: 5}
-      random_state: {type: int, default: 42}
       data_path: 
         type: path
         default: processed_data.csv
-    command: "python modelling_tuning_smote.py --n_estimators {n_estimators} --max_depth {max_depth} --min_samples_split {min_samples_split} --random_state {random_state} --data-path {data_path}"
+    command: "python modelling_tuning_smote.py --data-path {data_path}"
