@@ -8,3 +8,5 @@ entry_points:
       min_samples_split: {type: int, default: 5}
       random_state: {type: int, default: 42}
     command: "python modelling_tuning_smote.py --n_estimators {n_estimators} --max_depth {max_depth} --min_samples_split {min_samples_split} --random_state {random_state}"
+
+  
