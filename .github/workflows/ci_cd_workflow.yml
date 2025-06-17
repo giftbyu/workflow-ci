@@ -39,7 +39,7 @@ jobs:
         shell: bash -l {0}
         run: |
           conda activate ml-ci-env
-          mlflow run ./MLProject_folder -P data_path=MLProject_folder/processed_data.csv
+          mlflow run ./MLProject_folder -P --n_estimators {n_estimators} --max_depth {max_depth} --min_samples_split {min_samples_split} --random_state {random_state} processed_data.csv
           # Pastikan run_id.txt di-generate di root repo
           echo $MLFLOW_RUN_ID > run_id.txt
 
