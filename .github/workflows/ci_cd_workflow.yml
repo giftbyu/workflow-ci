@@ -39,7 +39,7 @@ jobs:
         shell: bash -l {0}
         run: |
           conda activate ml-ci-env
-          mlflow run ./MLProject_folder -P data_path=MLProject_folder/Kelayakan-pendidikan-indonesia_preprocessing/data_bersih.csv
+          mlflow run ./MLProject_folder -P data_path=MLProject_folder/processed_data.csv
           # Pastikan run_id.txt di-generate di root repo
           echo $MLFLOW_RUN_ID > run_id.txt
 
@@ -116,7 +116,7 @@ jobs:
         shell: bash -l {0}
         run: |
           RUN_ID=${{ steps.find_run_id.outputs.RUN_ID }}
-          IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/model-kelayakan-pendidikan:latest"
+          IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/workflow-ci:latest"
           
           conda activate ml-ci-env
           mlflow models build-docker \
