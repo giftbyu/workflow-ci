@@ -7,135 +7,94 @@ on:
   workflow_dispatch:
 
 env:
-  MLFLOW_TRACKING_URI: https://dagshub.com/giftbyu/mlops.mlflow
-  MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
-  MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+  DAGSHUB_URI: https://dagshub.com/giftbyu/mlops.mlflow
   DOCKER_IMAGE_NAME: septbyu/workflow-ci 
   EXPERIMENT_NAME: "WaterPotability_Tuning_CI"
   CONDA_ENV_NAME: "water-potability-env"
   PROJECT_FOLDER: "MLProject_folder"
 
 jobs:
-  train-build-push:
+  train-build-deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # Langkah 1: Checkout repository
-      - name: Checkout repository
+      - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      # Langkah 2: Menyiapkan Miniconda
-      - name: Set up Miniconda
+      - name: 2. Setup Miniconda
         uses: conda-incubator/setup-miniconda@v3
         with:
+          activate-environment: ${{ env.CONDA_ENV_NAME }}
+          environment-file: ${{ env.PROJECT_FOLDER }}/conda.yaml
           auto-update-conda: true
-          python-version: "3.12.7"
-      
-      # Langkah 3: Membuat lingkungan kerja virtual
-      - name: Create Conda Environment
-        shell: bash -l {0}
-        run: conda env create -f MLProject_folder/conda.yaml --name ml-ci-env
 
-      # Langkah Baru: Konfigurasi DagsHub
-      - name: Configure DagsHub
-        shell: bash -l {0}
+      - name: 3. Train Model with MLflow
+        id: train
+        env:
+          MLFLOW_TRACKING_URI: ${{ env.DAGSHUB_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
-          conda activate ml-ci-env
-          pip install dagshub
-          dagshub configure --username $MLFLOW_TRACKING_USERNAME --password $MLFLOW_TRACKING_PASSWORD
-
-      # Langkah 4: Menjalankan proyek MLflow
-      - name: Run MLflow Project
-        shell: bash -l {0}
-        run: |
-          conda activate ml-ci-env
-          export MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI
-          export MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME
-          export MLFLOW_TRACKING_PASSWORD=$MLFLOW_TRACKING_PASSWORD
+          cd ${{ env.PROJECT_FOLDER }}
           
-          mlflow run ./MLProject_folder -P data_path=MLProject_folder/processed_data.csv
-          echo $MLFLOW_RUN_ID > run_id.txt
+          # Run with retry mechanism
+          for i in {1..3}; do
+            mlflow run . --experiment-name "$EXPERIMENT_NAME" 2>&1 | tee mlflow_output.txt
+            if grep -q "MLflow Run ID" mlflow_output.txt; then
+              break
+            fi
+            sleep 10
+          done
+          
+          # Extract RUN_ID
+          RUN_ID=$(grep -oP "MLflow Run ID: \K[a-f0-9]{32}" mlflow_output.txt)
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
 
-      # Langkah 5: Membaca Run ID dari file
-      - name: Read Run ID from File
-        id: find_run_id
+      - name: 4. Download Model
+        env:
+          MLFLOW_TRACKING_URI: ${{ env.DAGSHUB_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
-          if [ ! -f run_id.txt ]; then
-            echo "::error::run_id.txt not found!"
-            exit 1
+          mlflow artifacts download --run-id "${{ env.RUN_ID }}" --artifact-path model -d model
+          
+          # Fix folder structure if needed
+          if [ -f "model/model/MLmodel" ]; then
+            mv model/model/* model/
+            rm -r model/model
           fi
-          RUN_ID=$(cat run_id.txt)
-          echo "RUN_ID=$RUN_ID" >> $GITHUB_OUTPUT
-          echo "Using Run ID: $RUN_ID"
 
-      # Langkah 6: Mengemas artefak model
-      - name: Package Model Artifact
-        id: package_artifact
-        shell: bash -l {0}
+      - name: 5. Backup Model to Google Drive
         run: |
-          RUN_ID=${{ steps.find_run_id.outputs.RUN_ID }}
-          ARTIFACT_NAME="model-$RUN_ID.tar.gz"
-          
-          if [ ! -d "mlruns/0/$RUN_ID/artifacts/model" ]; then
-            echo "::error::Model artifact not found!"
-            ls -R mlruns/0/$RUN_ID/artifacts
-            exit 1
-          fi
-          
-          tar -czvf $ARTIFACT_NAME -C mlruns/0/$RUN_ID/artifacts/ model
-          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-
-      # Langkah 7: Setup rclone (diperbaiki)
-      - name: Setup and Configure rclone
-        run: |
-          # 1. Simpan kredensial dengan format yang benar
-          echo '${{ secrets.GDRIVE_CREDENTIALS }}' | base64 -d > gdrive_credentials.json
-          
-          # 2. Install rclone menggunakan package manager
-          sudo apt-get update
           sudo apt-get install -y rclone
+          echo '${{ secrets.GDRIVE_CREDENTIALS }}' | base64 -d > gdrive_creds.json
           
-          # 3. Konfigurasi otomatis
-          mkdir -p ~/.config/rclone
-          cat <<EOF > ~/.config/rclone/rclone.conf
+          cat <<EOF > rclone.conf
           [gdrive]
           type = drive
           scope = drive
-          service_account_file = $(pwd)/gdrive_credentials.json
+          service_account_file = $(pwd)/gdrive_creds.json
           EOF
-
-      # Langkah 8: Upload ke Google Drive
-      - name: Upload to Google Drive
-        run: |
-          ARTIFACT_NAME="model-${{ steps.find_run_id.outputs.RUN_ID }}.tar.gz"
-          REMOTE_NAME="model-run-${{ steps.find_run_id.outputs.RUN_ID }}.tar.gz"
           
-          rclone copyto $ARTIFACT_NAME "gdrive:${{ secrets.GDRIVE_FOLDER_ID }}/$REMOTE_NAME" \
-            --drive-acknowledge-abuse \
-            --stats=5s \
+          rclone copy model gdrive:${{ secrets.GDRIVE_FOLDER_ID }}/models/${{ env.RUN_ID }} \
+            --config=rclone.conf \
             --progress
 
-      # Langkah 9: Login ke Docker Hub
-      - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+      - name: 6. Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 7. Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
-      # Langkah 10: Build dan Push Docker Image
-      - name: Build and Push Docker Image
-        if: github.event_name != 'pull_request'
-        shell: bash -l {0}
+
+      - name: 8. Build Docker Image
         run: |
-          RUN_ID=${{ steps.find_run_id.outputs.RUN_ID }}
-          IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/workflow-ci:latest"
+          # Use local model directory
+          mlflow models build-docker -m "model" -n "${{ env.DOCKER_IMAGE_NAME }}"
           
-          conda activate ml-ci-envss
-          mlflow models build-docker \
-            --model-uri "runs:/$RUN_ID/model" \
-            --name $IMAGE_NAME \
-            --env-manager conda \
-            --enable-mlserver
-          
-          docker push $IMAGE_NAME
+          # Verify image
+          docker image inspect ${{ env.DOCKER_IMAGE_NAME }}:latest
+
+      - name: 9. Push Docker Image
+        run: docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
