@@ -7,10 +7,9 @@ on:
   workflow_dispatch:
 
 env:
-  env:
+  MLFLOW_TRACKING_URI: https://dagshub.com/giftbyu/mlops.mlflow
   MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
   MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
-  DAGSHUB_URI: https://dagshub.com/giftbyu/mlops.mlflow
   DOCKER_IMAGE_NAME: septbyu/workflow-ci 
   EXPERIMENT_NAME: "WaterPotability_Tuning_CI"
   CONDA_ENV_NAME: "water-potability-env"
@@ -37,13 +36,24 @@ jobs:
         shell: bash -l {0}
         run: conda env create -f MLProject_folder/conda.yaml --name ml-ci-env
 
+      # Langkah Baru: Konfigurasi DagsHub
+      - name: Configure DagsHub
+        shell: bash -l {0}
+        run: |
+          conda activate ml-ci-env
+          pip install dagshub
+          dagshub configure --username $MLFLOW_TRACKING_USERNAME --password $MLFLOW_TRACKING_PASSWORD
+
       # Langkah 4: Menjalankan proyek MLflow
       - name: Run MLflow Project
         shell: bash -l {0}
         run: |
           conda activate ml-ci-env
+          export MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI
+          export MLFLOW_TRACKING_USERNAME=$MLFLOW_TRACKING_USERNAME
+          export MLFLOW_TRACKING_PASSWORD=$MLFLOW_TRACKING_PASSWORD
+          
           mlflow run ./MLProject_folder -P data_path=MLProject_folder/processed_data.csv
-          # Pastikan run_id.txt di-generate di root repo
           echo $MLFLOW_RUN_ID > run_id.txt
 
       # Langkah 5: Membaca Run ID dari file
@@ -121,7 +131,7 @@ jobs:
           RUN_ID=${{ steps.find_run_id.outputs.RUN_ID }}
           IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/workflow-ci:latest"
           
-          conda activate ml-ci-env
+          conda activate ml-ci-envss
           mlflow models build-docker \
             --model-uri "runs:/$RUN_ID/model" \
             --name $IMAGE_NAME \
