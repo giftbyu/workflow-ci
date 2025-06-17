@@ -19,7 +19,7 @@ def main(args):
     mlflow.log_param("script_name", "modelling_tuning_smote.py")
 
     try:
-        df = pd.read_csv("processed_data.csv")
+        df = pd.read_csv(args.data_path)
     except Exception as e:
         print(f"Error loading data: {e}")
         return
@@ -82,6 +82,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--data_path', type=str, required=True)
     parser.add_argument("--n_estimators", type=int, default=300)
     parser.add_argument("--max_depth", type=int, default=10)
     parser.add_argument("--min_samples_split", type=int, default=5)
