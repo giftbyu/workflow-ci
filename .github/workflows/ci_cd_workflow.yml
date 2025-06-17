@@ -56,13 +56,34 @@ jobs:
         run: |
           echo "Downloading artifacts for RUN_ID: ${{ env.RUN_ID }}"
           
-          # Download langsung ke folder model
-          mkdir -p model
-          mlflow artifacts download --run-id "${{ env.RUN_ID }}" --artifact-path model -d ./model
+          # Hapus folder model jika sudah ada
+          rm -rf model
           
-          echo "Model files:"
+          # Download artifact
+          mkdir -p model
+          mlflow artifacts download --run-id "${{ env.RUN_ID }}" --artifact-path model -d model
+          
+          # Verifikasi struktur folder
+          echo "Downloaded files structure:"
+          find model -type f
+          
+          # Pastikan MLmodel ada di subfolder
+          if [ -f "model/model/MLmodel" ]; then
+            echo "MLmodel found in subfolder"
+            # Pindahkan isi subfolder ke folder utama
+            mv model/model/* model/
+            rm -r model/model
+          elif [ -f "model/MLmodel" ]; then
+            echo "MLmodel found in main folder"
+          else
+            echo "::error::MLmodel missing!"
+            exit 1
+          fi
+          
+          # Verifikasi akhir
+          echo "Final model files:"
           ls -l model
-          [ -f "model/MLmodel" ] || { echo "::error::MLmodel missing!"; exit 1; }
+          [ -f "model/MLmodel" ] || { echo "::error::MLmodel still missing!"; exit 1; }
 
       - name: 5. Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -86,7 +107,6 @@ jobs:
           MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         shell: bash -l {0}
         run: |
-          # Reset Docker environment variables
           unset DOCKER_HOST
           unset DOCKER_TLS_VERIFY
           unset DOCKER_CERT_PATH
