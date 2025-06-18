@@ -37,9 +37,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd ${{ env.PROJECT_FOLDER }}
-          # Alihkan output untuk ditangkap dan juga ditampilkan di log
           mlflow run . --experiment-name "$EXPERIMENT_NAME" 2>&1 | tee mlflow_output.txt
-          # Ekstrak RUN_ID dari file log
           RUN_ID=$(grep -oP "MLflow Run ID: \K[a-f0-9]{32}" mlflow_output.txt)
           echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
 
@@ -50,27 +48,51 @@ jobs:
           MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         shell: bash -l {0}
         run: |
-          # Verifikasi RUN_ID
-          echo "Attempting to download artifacts for RUN_ID: ${{ env.RUN_ID }}"
+          echo "Downloading artifacts for RUN_ID: ${{ env.RUN_ID }}"
           if [ -z "${{ env.RUN_ID }}" ]; then
             echo "::error::RUN_ID is empty. Training step might have failed."
             exit 1
           fi
-          # Pastikan folder tujuan ada
           mkdir -p model
           mlflow artifacts download --run-id "${{ env.RUN_ID }}" --artifact-path model -d ./model
 
-      - name: 5. Log in to Docker Hub
+      # Langkah baru: Archive model artifacts
+      - name: 5. Archive Model Artifacts
+        run: tar -czvf model-${{ env.RUN_ID }}.tar.gz model
+
+      # Langkah baru: Setup rclone untuk upload ke Google Drive
+      - name: 6. Setup and Configure rclone for GDrive Upload
+        run: |
+          echo '${{ secrets.GDRIVE_CREDENTIALS }}' > gdrive_credentials.json
+          
+          curl -O https://downloads.rclone.org/rclone-current-linux-amd64.zip
+          unzip rclone-current-linux-amd64.zip
+          sudo mv rclone-*-linux-amd64/rclone /usr/local/bin/
+          
+          mkdir -p ~/.config/rclone
+          cat << EOF > ~/.config/rclone/rclone.conf
+          [gdrive]
+          type = drive
+          scope = drive
+          service_account_file = $(pwd)/gdrive_credentials.json
+          EOF
+
+      # Langkah baru: Upload ke Google Drive
+      - name: 7. Upload Artifact to Google Drive
+        run: |
+          rclone copyto model-${{ env.RUN_ID }}.tar.gz "gdrive:${{ secrets.GDRIVE_FOLDER_ID }}/model-run-${{ env.RUN_ID }}.tar.gz"
+
+      # Lanjutan proses Docker (nomor urut disesuaikan)
+      - name: 8. Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 6. Create Dockerfile and Build Image
+      - name: 9. Create Dockerfile and Build Image
         run: |
           cat <<EOT > Dockerfile
           FROM python:3.12.7
-          # Gunakan versi MLflow yang stabil
           RUN pip install mlflow==2.19.0
           COPY model /model
           EXPOSE 5000
@@ -78,5 +100,5 @@ jobs:
           EOT
           docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
 
-      - name: 7. Push Docker Image
+      - name: 10. Push Docker Image
         run: docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
